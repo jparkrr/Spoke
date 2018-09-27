@@ -25,9 +25,10 @@ const personFragment = `
   email
   roles(organizationId: $organizationId)
 `
+// TODO: figure out a way of getting all campaigns
 const organizationFragment = `
   id
-  people {
+  people(campaignId: $campaignId) {
     ${personFragment}
   }
 `
@@ -103,13 +104,13 @@ class AdminPersonList extends React.Component {
     if (!currentUser) return <LoadingIndicator />
 
     let people
-    if (query.campaignId) {
-      // if the campaign filter has been used, get people from the campaign
-      people = campaignData.campaign && campaignData.campaign.texters || []
-    } else {
+    // if (query.campaignId) {
+    //   // if the campaign filter has been used, get people from the campaign
+    //   people = campaignData.campaign && campaignData.campaign.texters || []
+    // } else {
       // otherwise get people from the organization
       people = personData.organization && personData.organization.people || []
-    }
+    // }
     if (people.length === 0) {
       return (
         <Empty
@@ -241,15 +242,17 @@ const mapMutationsToProps = () => ({
   })
 })
 
+// TODO: this could be a function retrning the query based on ownprops.
 const mapQueriesToProps = ({ ownProps }) => ({
   personData: {
-    query: gql`query getPeople($organizationId: String!) {
+    query: gql`query getPeople($organizationId: String!, $campaignId: String) {
       organization(id: $organizationId) {
         ${organizationFragment}
       }
     }`,
     variables: {
-      organizationId: ownProps.params.organizationId
+      organizationId: ownProps.params.organizationId,
+      campaignId: ownProps.location.query.campaignId || '1'
     },
     forceFetch: true
   },
