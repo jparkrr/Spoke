@@ -20,6 +20,9 @@ module.exports = {
     DEFAULT_SERVICE: 'fakeservice',
     DST_REFERENCE_TIMEZONE: 'America/New_York',
     DATABASE_SETUP_TEARDOWN_TIMEOUT: 60000,
+    // TODO: make redis an option for local
+    REDIS_URL: 'redis://localhost:6379/9'
+    // CACHE_PREFIX: 'test_' need to put this in the env or accessible from global
   },
   moduleFileExtensions: [
     "js",
