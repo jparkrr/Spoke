@@ -2,8 +2,7 @@
 import { resolvers } from '../src/server/api/schema'
 import { schema } from '../src/api/schema'
 import { graphql } from 'graphql'
-import { User, Organization, Campaign, CampaignContact, Assignment } from '../src/server/models/'
-import { resolvers as campaignResolvers } from '../src/server/api/campaign'
+import { User, CampaignContact } from '../src/server/models/'
 import { getContext, setupTest, cleanupTest } from './test_helpers'
 import { makeExecutableSchema } from 'graphql-tools'
 
@@ -15,14 +14,12 @@ const mySchema = makeExecutableSchema({
 
 const rootValue = {}
 
-// data items used across tests
-
 let testAdminUser
 let testInvite
 let testOrganization
 let testCampaign
 let testTexterUser
-let testContact
+let testContact // eslint-disable-line
 
 // data creation functions
 
@@ -87,9 +84,9 @@ async function createInvite() {
 async function createOrganization() {
   const user = testAdminUser
   const name = 'Testy test organization'
-  const userId = TODO
+  const userId = user.id
   const inviteId = testInvite.data.createInvite.id
-  
+
   const context = getContext({ user })
 
   const orgQuery = `mutation createOrganization($name: String!, $userId: String!, $inviteId: String!) {
@@ -125,7 +122,6 @@ async function createCampaign() {
   const description = 'test description'
   const organizationId = testOrganization.data.createOrganization.id
   const contacts = []
-  // TODO: replace the rest with a call to test lib
   const context = getContext({ user })
 
   const campaignQuery = `mutation createCampaign($input: CampaignInput!) {
@@ -173,7 +169,7 @@ async function createTexter() {
   const variables = {
     organizationUuid: testOrganization.data.createOrganization.uuid
   }
-  const context = getContext({ user: testTexterUser })
+  const context = getContext({ user })
   await graphql(mySchema, joinQuery, rootValue, context, variables)
   return user
 }
@@ -230,166 +226,196 @@ async function assignTexter() {
     campaign: updateCampaign
   }
   return await graphql(mySchema, campaignEditQuery, rootValue, context, variables)
-})
+}
 
-// TODO: before each test we should reset this and have the db set up for testing.
+async function createScript() {
+  const campaignEditQuery = `
+  mutation editCampaign($campaignId: String!, $campaign: CampaignInput!) {
+    editCampaign(id: $campaignId, campaign: $campaign) {
+      id
+    }
+  }`
+  const context = getContext({ user: testAdminUser })
+  const campaignId = testCampaign.data.createCampaign.id
+  const variables = {
+    campaignId,
+    campaign: {
+      interactionSteps: {
+        id: '1',
+        questionText: 'Test',
+        script: '{zip}',
+        answerOption: '',
+        answerActions: '',
+        parentInteractionId: null,
+        isDeleted: false,
+        interactionSteps: [
+          {
+            id: '2',
+            questionText: 'hmm',
+            script: '{lastName}',
+            answerOption: 'hmm',
+            answerActions: '',
+            parentInteractionId: '1',
+            isDeleted: false,
+            interactionSteps: [
+            ]
+          }
+        ]
+      }
+    }
+  }
+  return await graphql(mySchema, campaignEditQuery, rootValue, context, variables)
+}
+
+
+async function startCampaign() {
+  jest.mock('../src/server/mail')
+  const startCampaignQuery = `mutation startCampaign($campaignId: String!) {
+    startCampaign(id: $campaignId) {
+      id
+    }
+  }`
+  const context = getContext({ user: testAdminUser })
+  const variables = { campaignId: testCampaign.data.createCampaign.id }
+  return await graphql(mySchema, startCampaignQuery, rootValue, context, variables)
+}
+
 beforeEach(async () => {
+  await cleanupTest()
   await setupTest()
   testAdminUser = await createUser()
-  
+
   testInvite = await createInvite()
-  
+
   testOrganization = await createOrganization()
-  
+
   testCampaign = await createCampaign()
-  
+
   testContact = await createContact()
-  
+
   testTexterUser = await createTexter()
-  // TODO: Move methods from here and backend to testlib and just have wrappers in this file that provide the data.
-  
-  // But we also have things that used to be in tests. That should be in lib too, even if it's not in backend.
-  // As long as it's necessary.
+  // TODO: Move creation to lib.
+
   await assignTexter()
   await createScript()
+  // await createResponse()
   await startCampaign()
 }, global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
-afterEach(async () => await cleanupTest(), global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
 
+// afterEach(async () => await cleanupTest(), global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
 
-// it('should save a campaign script composed of interaction steps', async() => {})
+import TexterTodo, { contactDataFragment } from '../src/containers/TexterTodo'
 
-// it('should save some canned responses for texters', async() => {})
+it('should send an inital message to test contacts', async() => {
+  const assignmentId = 1
+  // TODO: mock loaddata to get the queries and mutations of TexterTodo
+  //  <TexterTodo messageStatus='needsMessage' store={{}} params={{ assignmentId }} />
+  const getContactsQuery = `query getContacts($assignmentId: String!, $contactsFilter: ContactsFilter!) {
+    assignment(id: $assignmentId) {
+      id
+      userCannedResponses {
+        id
+        title
+        text
+        isUserCreated
+      }
+      campaignCannedResponses {
+        id
+        title
+        text
+        isUserCreated
+      }
+      texter {
+        id
+        firstName
+        lastName
+      }
+      campaign {
+        id
+        isArchived
+        useDynamicAssignment
+        organization {
+          id
+          textingHoursEnforced
+          textingHoursStart
+          textingHoursEnd
+          threeClickEnabled
+          optOutMessage
+        }
+        customFields
+        interactionSteps {
+          id
+          script
+          question {
+            text
+            answerOptions {
+              value
+              nextInteractionStep {
+                id
+                script
+              }
+            }
+          }
+        }
+      }
+      contacts(contactsFilter: $contactsFilter) {
+        id
+      }
+      allContactsCount: contactsCount
+    }
+  }`
+  const variables1 = {
+    contactsFilter: {
+      messageStatus: 'needsMessage',
+      isOptedOut: false,
+      validTimezone: true
+    },
+    assignmentId
+  }
 
-// it('should start the campaign', async() => {})
+  const context = getContext({ user: testTexterUser })
+  const ret = await graphql(mySchema, getContactsQuery, rootValue, context, variables1)
 
-// TEST STUBS: MESSAGING
+  const getAssignmentContacts = `
+    mutation getAssignmentContacts($assignmentId: String!, $contactIds: [String]!, $findNew: Boolean) {
+      getAssignmentContacts(assignmentId: $assignmentId, contactIds: $contactIds, findNew: $findNew) {
+        ${contactDataFragment}
+      }
+    }`
+  const variables2 = {
+    assignmentId,
+    contactIds: ret.data.assignment.contacts.map(e => e.id),
+    findNew: false
+  }
+  const ret2 = await graphql(mySchema, getAssignmentContacts, rootValue, context, variables2)
+  const contact = ret2.data.getAssignmentContacts[0]
+  const message = {
+    contactNumber: contact.cell,
+    userId: testTexterUser.id,
+    text: 'test text autorespond',
+    assignmentId
+  }
 
-// it('should send an inital message to test contacts', async() => {})
-
-describe('Campaign', () => {
-  let organization
-
-  beforeEach(async () => {
-    organization = await new Organization({
-      name: 'organization',
-      texting_hours_start: 0,
-      texting_hours_end: 0
-    }).save()
-  })
-
-  describe('contacts', async () => {
-    let campaigns
-    let contacts
-
-    beforeEach(async () => {
-      campaigns = await Promise.all(
-        [
-          new Campaign({
-            organization_id: organization.id,
-            is_started: false,
-            is_archived: false,
-            due_by: new Date()
-          }),
-          new Campaign({
-            organization_id: organization.id,
-            is_started: false,
-            is_archived: false,
-            due_by: new Date()
-          })
-        ].map(async each => each.save())
-      )
-
-      contacts = await Promise.all(
-        [
-          new CampaignContact({
-            campaign_id: campaigns[0].id,
-            cell: '',
-            message_status: 'closed'
-          }),
-          new CampaignContact({
-            campaign_id: campaigns[1].id,
-            cell: '',
-            message_status: 'closed'
-          })
-        ].map(async each => each.save())
-      )
-    })
-
-    test('resolves contacts', async () => {
-      const results = await campaignResolvers.Campaign.contacts(campaigns[0])
-      expect(results).toHaveLength(1)
-      expect(results[0].campaign_id).toEqual(campaigns[0].id)
-    })
-
-    test('resolves contacts count', async () => {
-      const results = await campaignResolvers.Campaign.contactsCount(campaigns[0])
-      expect(results).toEqual(1)
-    })
-
-    test('resolves contacts count when empty', async () => {
-      const campaign = await new Campaign({
-        organization_id: organization.id,
-        is_started: false,
-        is_archived: false,
-        due_by: new Date()
-      }).save()
-      const results = await campaignResolvers.Campaign.contactsCount(campaign)
-      expect(results).toEqual(0)
-    })
-  })
-
-  describe('unassigned contacts', () => {
-    let campaign
-
-    beforeEach(async () => {
-      campaign = await new Campaign({
-        organization_id: organization.id,
-        is_started: false,
-        is_archived: false,
-        due_by: new Date()
-      }).save()
-    })
-
-    test('resolves unassigned contacts when true', async () => {
-      const contact = await new CampaignContact({
-        campaign_id: campaign.id,
-        message_status: 'closed',
-        cell: ''
-      }).save()
-
-      const results = await campaignResolvers.Campaign.hasUnassignedContacts(campaign)
-      expect(results).toEqual(true)
-    })
-
-    test('resolves unassigned contacts when false with assigned contacts', async () => {
-      const user = await new User({
-        auth0_id: 'test123',
-        first_name: 'TestUserFirst',
-        last_name: 'TestUserLast',
-        cell: '555-555-5555',
-        email: 'testuser@example.com'
-      }).save()
-
-      const assignment = await new Assignment({
-        user_id: user.id,
-        campaign_id: campaign.id
-      }).save()
-
-      const contact = await new CampaignContact({
-        campaign_id: campaign.id,
-        assignment_id: assignment.id,
-        message_status: 'closed',
-        cell: ''
-      }).save()
-
-      const results = await campaignResolvers.Campaign.hasUnassignedContacts(campaign)
-      expect(results).toEqual(false)
-    })
-
-    test('resolves unassigned contacts when false with no contacts', async () => {
-      const results = await campaignResolvers.Campaign.hasUnassignedContacts(campaign)
-      expect(results).toEqual(false)
-    })
-  })
+  const messageQuery = `mutation sendMessage($message: MessageInput!, $campaignContactId: String!) {
+    sendMessage(message: $message, campaignContactId: $campaignContactId) {
+      id
+      messageStatus
+      messages {
+        id
+        createdAt
+        text
+        isFromContact
+      }
+    }
+  }`
+  const variables3 = {
+    message,
+    campaignContactId: contact.id
+  }
+  const ret3 = await graphql(mySchema, messageQuery, rootValue, context, variables3)
+  // await this.props.mutations.sendMessage(message, contact.id)
+  // await this.handleSubmitSurveys()
+  // this.props.onFinishContact(contact.id)
+  console.log(ret3) // TODO: check response
+  // TODO: check the db
 })

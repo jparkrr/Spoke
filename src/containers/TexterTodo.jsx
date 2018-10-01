@@ -5,7 +5,7 @@ import { withRouter } from 'react-router'
 import loadData from './hoc/load-data'
 import gql from 'graphql-tag'
 
-const contactDataFragment = `
+export const contactDataFragment = `
         id
         assignmentId
         firstName
