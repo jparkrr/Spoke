@@ -47,7 +47,9 @@ async function createUser(
   }
 }
 
-async function createContact(campaignId) {
+async function createContact() {
+  const campaignId = testCampaign.data.createCampaign.id
+
   const contact = new CampaignContact({
     first_name: 'Ann',
     last_name: 'Lewis',
@@ -82,7 +84,12 @@ async function createInvite() {
   }
 }
 
-async function createOrganization(user, name, userId, inviteId) {
+async function createOrganization() {
+  const user = testAdminUser
+  const name = 'Testy test organization'
+  const userId = TODO
+  const inviteId = testInvite.data.createInvite.id
+  
   const context = getContext({ user })
 
   const orgQuery = `mutation createOrganization($name: String!, $userId: String!, $inviteId: String!) {
@@ -112,7 +119,13 @@ async function createOrganization(user, name, userId, inviteId) {
   }
 }
 
-async function createCampaign(user, title, description, organizationId, contacts = []) {
+async function createCampaign() {
+  const user = testAdminUser
+  const title = 'test campaign'
+  const description = 'test description'
+  const organizationId = testOrganization.data.createOrganization.id
+  const contacts = []
+  // TODO: replace the rest with a call to test lib
   const context = getContext({ user })
 
   const campaignQuery = `mutation createCampaign($input: CampaignInput!) {
@@ -165,31 +178,7 @@ async function createTexter() {
   return user
 }
 
-// TODO: before each test we should reset this and have the db set up for testing.
-beforeEach(async () => {
-  await setupTest()
-  testAdminUser = await createUser()
-  testInvite = await createInvite()
-  testOrganization = await createOrganization(
-    testAdminUser,
-    'Testy test organization',
-    testInvite.data.createInvite.id,
-    testInvite.data.createInvite.id
-  )
-  testCampaign = await createCampaign(
-    testAdminUser,
-    'test campaign',
-    'test description',
-    testOrganization.data.createOrganization.id
-  )
-  testContact = await createContact(testCampaign.data.createCampaign.id)
-  testTexterUser = await createTexter()
-  // TODO: A lot of this is duplicated from backend test. how to fix?
-}, global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
-afterEach(async () => await cleanupTest(), global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
-
-
-it('should assign texters to campaign contacts', async () => {
+async function assignTexter() {
   const campaignEditQuery = `
   mutation editCampaign($campaignId: String!, $campaign: CampaignInput!) {
     editCampaign(id: $campaignId, campaign: $campaign) {
@@ -240,10 +229,33 @@ it('should assign texters to campaign contacts', async () => {
     campaignId,
     campaign: updateCampaign
   }
-  const result = await graphql(mySchema, campaignEditQuery, rootValue, context, variables)
-  expect(result.data.editCampaign.texters.length).toBe(1)
-  expect(result.data.editCampaign.texters[0].assignment.contactsCount).toBe(1)
+  return await graphql(mySchema, campaignEditQuery, rootValue, context, variables)
 })
+
+// TODO: before each test we should reset this and have the db set up for testing.
+beforeEach(async () => {
+  await setupTest()
+  testAdminUser = await createUser()
+  
+  testInvite = await createInvite()
+  
+  testOrganization = await createOrganization()
+  
+  testCampaign = await createCampaign()
+  
+  testContact = await createContact()
+  
+  testTexterUser = await createTexter()
+  // TODO: Move methods from here and backend to testlib and just have wrappers in this file that provide the data.
+  
+  // But we also have things that used to be in tests. That should be in lib too, even if it's not in backend.
+  // As long as it's necessary.
+  await assignTexter()
+  await createScript()
+  await startCampaign()
+}, global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
+afterEach(async () => await cleanupTest(), global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
+
 
 // it('should save a campaign script composed of interaction steps', async() => {})
 
