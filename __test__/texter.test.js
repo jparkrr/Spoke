@@ -268,8 +268,8 @@ async function createScript() {
 }
 
 
+jest.mock('../src/server/mail')
 async function startCampaign() {
-  jest.mock('../src/server/mail')
   const startCampaignQuery = `mutation startCampaign($campaignId: String!) {
     startCampaign(id: $campaignId) {
       id
@@ -304,90 +304,27 @@ beforeEach(async () => {
 
 // afterEach(async () => await cleanupTest(), global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
 
-import TexterTodo, { contactDataFragment } from '../src/containers/TexterTodo'
+import loadData from '../src/containers/hoc/load-data'
+// import TexterTodo, { contactDataFragment } from '../src/containers/TexterTodo'
+jest.mock('../src/containers/hoc/load-data')
 
 it('should send an inital message to test contacts', async() => {
   const assignmentId = 1
-  // TODO: mock loaddata to get the queries and mutations of TexterTodo
-  //  <TexterTodo messageStatus='needsMessage' store={{}} params={{ assignmentId }} />
-  const getContactsQuery = `query getContacts($assignmentId: String!, $contactsFilter: ContactsFilter!) {
-    assignment(id: $assignmentId) {
-      id
-      userCannedResponses {
-        id
-        title
-        text
-        isUserCreated
-      }
-      campaignCannedResponses {
-        id
-        title
-        text
-        isUserCreated
-      }
-      texter {
-        id
-        firstName
-        lastName
-      }
-      campaign {
-        id
-        isArchived
-        useDynamicAssignment
-        organization {
-          id
-          textingHoursEnforced
-          textingHoursStart
-          textingHoursEnd
-          threeClickEnabled
-          optOutMessage
-        }
-        customFields
-        interactionSteps {
-          id
-          script
-          question {
-            text
-            answerOptions {
-              value
-              nextInteractionStep {
-                id
-                script
-              }
-            }
-          }
-        }
-      }
-      contacts(contactsFilter: $contactsFilter) {
-        id
-      }
-      allContactsCount: contactsCount
-    }
-  }`
-  const variables1 = {
-    contactsFilter: {
-      messageStatus: 'needsMessage',
-      isOptedOut: false,
-      validTimezone: true
-    },
-    assignmentId
-  }
+  // TODO: refactor the way of getting queries
+  jest.resetAllMocks()
+  require('../src/containers/TexterTodo')
+  const { mapQueriesToProps: getQuery, mapMutationsToProps } = loadData.mock.calls[1][1] // TODO: somehow fix [1] (imports another component)
 
   const context = getContext({ user: testTexterUser })
-  const ret = await graphql(mySchema, getContactsQuery, rootValue, context, variables1)
+  const q = getQuery({ ownProps: { messageStatus: 'needsMessage', params: { assignmentId } } })
+  const m = mapMutationsToProps({ ownProps: { messageStatus: 'needsMessage', params: { assignmentId } } })
+  debugger
+  const ret = await graphql(mySchema, q.data.query.loc.source.body, rootValue, context, q.data.variables)
 
-  const getAssignmentContacts = `
-    mutation getAssignmentContacts($assignmentId: String!, $contactIds: [String]!, $findNew: Boolean) {
-      getAssignmentContacts(assignmentId: $assignmentId, contactIds: $contactIds, findNew: $findNew) {
-        ${contactDataFragment}
-      }
-    }`
-  const variables2 = {
-    assignmentId,
-    contactIds: ret.data.assignment.contacts.map(e => e.id),
-    findNew: false
-  }
-  const ret2 = await graphql(mySchema, getAssignmentContacts, rootValue, context, variables2)
+  const getAssignmentMutation = m.getAssignmentContacts(ret.data.assignment.contacts.map(e => e.id), false)
+
+  const ret2 = await graphql(mySchema, getAssignmentMutation.mutation.loc.source.body, rootValue, context, getAssignmentMutation.variables)
+  const { mapMutationsToProps: mutations2 } = loadData.mock.calls[0][1]
   const contact = ret2.data.getAssignmentContacts[0]
   const message = {
     contactNumber: contact.cell,
@@ -395,24 +332,9 @@ it('should send an inital message to test contacts', async() => {
     text: 'test text autorespond',
     assignmentId
   }
+  const sendMessage = mutations2().sendMessage(message, contact.id)
 
-  const messageQuery = `mutation sendMessage($message: MessageInput!, $campaignContactId: String!) {
-    sendMessage(message: $message, campaignContactId: $campaignContactId) {
-      id
-      messageStatus
-      messages {
-        id
-        createdAt
-        text
-        isFromContact
-      }
-    }
-  }`
-  const variables3 = {
-    message,
-    campaignContactId: contact.id
-  }
-  const ret3 = await graphql(mySchema, messageQuery, rootValue, context, variables3)
+  const ret3 = await graphql(mySchema, sendMessage.mutation.loc.source.body, rootValue, context, sendMessage.variables)
   // await this.props.mutations.sendMessage(message, contact.id)
   // await this.handleSubmitSurveys()
   // this.props.onFinishContact(contact.id)
