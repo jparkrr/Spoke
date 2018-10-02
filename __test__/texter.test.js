@@ -2,7 +2,7 @@
 import { resolvers } from '../src/server/api/schema'
 import { schema } from '../src/api/schema'
 import { graphql } from 'graphql'
-import { User, CampaignContact } from '../src/server/models/'
+import { User, CampaignContact, r } from '../src/server/models/'
 import { getContext, setupTest, cleanupTest, getGql } from './test_helpers'
 import { makeExecutableSchema } from 'graphql-tools'
 
@@ -19,9 +19,7 @@ let testInvite
 let testOrganization
 let testCampaign
 let testTexterUser
-let testContact // eslint-disable-line
-
-// data creation functions
+let testContact
 
 async function createUser(
   userInfo = {
@@ -33,15 +31,8 @@ async function createUser(
   }
 ) {
   const user = new User(userInfo)
-  try {
-    await user.save()
-    console.log('created user')
-    console.log(user)
-    return user
-  } catch (err) {
-    console.error('Error saving user')
-    return false
-  }
+  await user.save()
+  return user
 }
 
 async function createContact() {
@@ -54,15 +45,8 @@ async function createContact() {
     zip: '12345',
     campaign_id: campaignId
   })
-  try {
-    await contact.save()
-    console.log('created contact')
-    console.log(contact)
-    return contact
-  } catch (err) {
-    console.error('Error saving contact: ', err)
-    return false
-  }
+  await contact.save()
+  return contact
 }
 
 async function createInvite() {
@@ -72,13 +56,7 @@ async function createInvite() {
     }
   }`
   const context = getContext()
-  try {
-    const invite = await graphql(mySchema, inviteQuery, rootValue, context)
-    return invite
-  } catch (err) {
-    console.error('Error creating invite')
-    return false
-  }
+  return await graphql(mySchema, inviteQuery, rootValue, context)
 }
 
 async function createOrganization() {
@@ -93,11 +71,6 @@ async function createOrganization() {
     createOrganization(name: $name, userId: $userId, inviteId: $inviteId) {
       id
       uuid
-      name
-      threeClickEnabled
-      textingHoursEnforced
-      textingHoursStart
-      textingHoursEnd
     }
   }`
 
@@ -106,14 +79,7 @@ async function createOrganization() {
     name,
     inviteId
   }
-
-  try {
-    const org = await graphql(mySchema, orgQuery, rootValue, context, variables)
-    return org
-  } catch (err) {
-    console.error('Error creating organization')
-    return false
-  }
+  return await graphql(mySchema, orgQuery, rootValue, context, variables)
 }
 
 async function createCampaign() {
@@ -127,11 +93,6 @@ async function createCampaign() {
   const campaignQuery = `mutation createCampaign($input: CampaignInput!) {
     createCampaign(campaign: $input) {
       id
-      title
-      contacts {
-        firstName
-        lastName
-      }
     }
   }`
   const variables = {
@@ -142,14 +103,7 @@ async function createCampaign() {
       contacts
     }
   }
-
-  try {
-    const campaign = await graphql(mySchema, campaignQuery, rootValue, context, variables)
-    return campaign
-  } catch (err) {
-    console.error('Error creating campaign')
-    return false
-  }
+  return await graphql(mySchema, campaignQuery, rootValue, context, variables)
 }
 
 async function createTexter() {
@@ -179,36 +133,6 @@ async function assignTexter() {
   mutation editCampaign($campaignId: String!, $campaign: CampaignInput!) {
     editCampaign(id: $campaignId, campaign: $campaign) {
       id
-      title
-      description
-      dueBy
-      isStarted
-      isArchived
-      contactsCount
-      datawarehouseAvailable
-      customFields
-      texters {
-        id
-        firstName
-        assignment(campaignId:$campaignId) {
-          contactsCount
-          needsMessageCount: contactsCount(contactsFilter:{messageStatus:\"needsMessage\"})
-        }
-      }
-      interactionSteps {
-        id
-        questionText
-        script
-        answerOption
-        answerActions
-        parentInteractionId
-        isDeleted
-      }
-      cannedResponses {
-        id
-        title
-        text
-      }
     }
   }`
   const context = getContext({ user: testAdminUser })
@@ -257,8 +181,7 @@ async function createScript() {
             answerActions: '',
             parentInteractionId: '1',
             isDeleted: false,
-            interactionSteps: [
-            ]
+            interactionSteps: []
           }
         ]
       }
@@ -266,7 +189,6 @@ async function createScript() {
   }
   return await graphql(mySchema, campaignEditQuery, rootValue, context, variables)
 }
-
 
 jest.mock('../src/server/mail')
 async function startCampaign() {
@@ -281,8 +203,6 @@ async function startCampaign() {
 }
 
 beforeEach(async () => {
-  await cleanupTest()
-  // TODO: clear cache
   await setupTest()
   testAdminUser = await createUser()
 
@@ -303,17 +223,26 @@ beforeEach(async () => {
   await startCampaign()
 }, global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
 
-// afterEach(async () => await cleanupTest(), global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
+afterEach(async () => {
+  await cleanupTest()
+  r.redis.flushdb()
+}, global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
 
-it('should send an inital message to test contacts', async() => {
+it('should send an inital message to test contacts', async () => {
   const assignmentId = 1
 
-  const { query, mutations } = getGql('../src/containers/TexterTodo', { messageStatus: 'needsMessage', params: { assignmentId } })
+  const { query, mutations } = getGql('../src/containers/TexterTodo', {
+    messageStatus: 'needsMessage',
+    params: { assignmentId }
+  })
 
   const context = getContext({ user: testTexterUser })
   const ret = await graphql(mySchema, query[0], rootValue, context, query[1])
 
-  const [mutationAssign, varsAssign] = mutations.getAssignmentContacts(ret.data.assignment.contacts.map(e => e.id), false)
+  const [mutationAssign, varsAssign] = mutations.getAssignmentContacts(
+    ret.data.assignment.contacts.map(e => e.id),
+    false
+  )
 
   const ret2 = await graphql(mySchema, mutationAssign, rootValue, context, varsAssign)
   const contact = ret2.data.getAssignmentContacts[0]
@@ -326,7 +255,6 @@ it('should send an inital message to test contacts', async() => {
   }
 
   const [messageMutation, messageVars] = mutations.sendMessage(message, contact.id)
-
 
   const ret3 = await graphql(mySchema, messageMutation, rootValue, context, messageVars)
   // await this.props.mutations.sendMessage(message, contact.id)
