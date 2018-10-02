@@ -3,7 +3,7 @@ import { resolvers } from '../src/server/api/schema'
 import { schema } from '../src/api/schema'
 import { graphql } from 'graphql'
 import { User, CampaignContact } from '../src/server/models/'
-import { getContext, setupTest, cleanupTest } from './test_helpers'
+import { getContext, setupTest, cleanupTest, getGql } from './test_helpers'
 import { makeExecutableSchema } from 'graphql-tools'
 
 const mySchema = makeExecutableSchema({
@@ -282,6 +282,7 @@ async function startCampaign() {
 
 beforeEach(async () => {
   await cleanupTest()
+  // TODO: clear cache
   await setupTest()
   testAdminUser = await createUser()
 
@@ -304,40 +305,33 @@ beforeEach(async () => {
 
 // afterEach(async () => await cleanupTest(), global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
 
-import loadData from '../src/containers/hoc/load-data'
-// import TexterTodo, { contactDataFragment } from '../src/containers/TexterTodo'
-jest.mock('../src/containers/hoc/load-data')
-
 it('should send an inital message to test contacts', async() => {
   const assignmentId = 1
-  // TODO: refactor the way of getting queries
-  jest.resetAllMocks()
-  require('../src/containers/TexterTodo')
-  const { mapQueriesToProps: getQuery, mapMutationsToProps } = loadData.mock.calls[1][1] // TODO: somehow fix [1] (imports another component)
+
+  const { query, mutations } = getGql('../src/containers/TexterTodo', { messageStatus: 'needsMessage', params: { assignmentId } })
 
   const context = getContext({ user: testTexterUser })
-  const q = getQuery({ ownProps: { messageStatus: 'needsMessage', params: { assignmentId } } })
-  const m = mapMutationsToProps({ ownProps: { messageStatus: 'needsMessage', params: { assignmentId } } })
-  debugger
-  const ret = await graphql(mySchema, q.data.query.loc.source.body, rootValue, context, q.data.variables)
+  const ret = await graphql(mySchema, query[0], rootValue, context, query[1])
 
-  const getAssignmentMutation = m.getAssignmentContacts(ret.data.assignment.contacts.map(e => e.id), false)
+  const [mutationAssign, varsAssign] = mutations.getAssignmentContacts(ret.data.assignment.contacts.map(e => e.id), false)
 
-  const ret2 = await graphql(mySchema, getAssignmentMutation.mutation.loc.source.body, rootValue, context, getAssignmentMutation.variables)
-  const { mapMutationsToProps: mutations2 } = loadData.mock.calls[0][1]
+  const ret2 = await graphql(mySchema, mutationAssign, rootValue, context, varsAssign)
   const contact = ret2.data.getAssignmentContacts[0]
+
   const message = {
     contactNumber: contact.cell,
     userId: testTexterUser.id,
     text: 'test text autorespond',
     assignmentId
   }
-  const sendMessage = mutations2().sendMessage(message, contact.id)
 
-  const ret3 = await graphql(mySchema, sendMessage.mutation.loc.source.body, rootValue, context, sendMessage.variables)
+  const [messageMutation, messageVars] = mutations.sendMessage(message, contact.id)
+
+
+  const ret3 = await graphql(mySchema, messageMutation, rootValue, context, messageVars)
   // await this.props.mutations.sendMessage(message, contact.id)
   // await this.handleSubmitSurveys()
   // this.props.onFinishContact(contact.id)
-  console.log(ret3) // TODO: check response
+  console.log(ret3.data.sendMessage.messages) // TODO: check response
   // TODO: check the db
 })
