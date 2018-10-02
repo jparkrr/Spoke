@@ -215,7 +215,6 @@ beforeEach(async () => {
   testContact = await createContact()
 
   testTexterUser = await createTexter()
-  // TODO: Move creation to lib.
 
   await assignTexter()
   await createScript()
@@ -231,20 +230,20 @@ afterEach(async () => {
 it('should send an inital message to test contacts', async () => {
   const assignmentId = 1
 
-  const { query, mutations } = getGql('../src/containers/TexterTodo', {
+  const { query: [getContacts, getContactsVars], mutations } = getGql('../src/containers/TexterTodo', {
     messageStatus: 'needsMessage',
     params: { assignmentId }
   })
 
   const context = getContext({ user: testTexterUser })
-  const ret = await graphql(mySchema, query[0], rootValue, context, query[1])
+  const contactsResult = await graphql(mySchema, getContacts, rootValue, context, getContactsVars)
 
-  const [mutationAssign, varsAssign] = mutations.getAssignmentContacts(
-    ret.data.assignment.contacts.map(e => e.id),
+  const [getAssignmentContacts, assignVars] = mutations.getAssignmentContacts(
+    contactsResult.data.assignment.contacts.map(e => e.id),
     false
   )
 
-  const ret2 = await graphql(mySchema, mutationAssign, rootValue, context, varsAssign)
+  const ret2 = await graphql(mySchema, getAssignmentContacts, rootValue, context, assignVars)
   const contact = ret2.data.getAssignmentContacts[0]
 
   const message = {
@@ -256,10 +255,14 @@ it('should send an inital message to test contacts', async () => {
 
   const [messageMutation, messageVars] = mutations.sendMessage(message, contact.id)
 
-  const ret3 = await graphql(mySchema, messageMutation, rootValue, context, messageVars)
-  // await this.props.mutations.sendMessage(message, contact.id)
-  // await this.handleSubmitSurveys()
-  // this.props.onFinishContact(contact.id)
-  console.log(ret3.data.sendMessage.messages) // TODO: check response
-  // TODO: check the db
+  const messageResult = await graphql(mySchema, messageMutation, rootValue, context, messageVars)
+  const convo = messageResult.data.sendMessage
+
+  expect(convo.messageStatus).toBe('messaged') // TODO: check response
+  expect(convo.messages.length).toBe(1)
+  expect(convo.messages[0].text).toBe(message.text)
+  // TODO: check the db for the message
+
+  // TODO: run onFinishContact(contact.id) mutation
+  // TODO: check the status of the contact
 })
