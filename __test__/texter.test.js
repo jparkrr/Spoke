@@ -228,7 +228,7 @@ afterEach(async () => {
 }, global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
 
 it('should send an inital message to test contacts', async () => {
-  const assignmentId = 1
+  const assignmentId = 1 // TODO: don't hardcode this
 
   const { query: [getContacts, getContactsVars], mutations } = getGql('../src/containers/TexterTodo', {
     messageStatus: 'needsMessage',
@@ -249,20 +249,51 @@ it('should send an inital message to test contacts', async () => {
   const message = {
     contactNumber: contact.cell,
     userId: testTexterUser.id,
-    text: 'test text autorespond',
+    text: 'test text',
     assignmentId
   }
 
   const [messageMutation, messageVars] = mutations.sendMessage(message, contact.id)
 
   const messageResult = await graphql(mySchema, messageMutation, rootValue, context, messageVars)
-  const convo = messageResult.data.sendMessage
+  const campaignContact = messageResult.data.sendMessage
 
-  expect(convo.messageStatus).toBe('messaged') // TODO: check response
-  expect(convo.messages.length).toBe(1)
-  expect(convo.messages[0].text).toBe(message.text)
-  // TODO: check the db for the message
+  // These things are expected to be returned from the sendMessage mutation
+  expect(campaignContact.messageStatus).toBe('messaged')
+  expect(campaignContact.messages.length).toBe(1)
+  expect(campaignContact.messages[0].text).toBe(message.text)
 
-  // TODO: run onFinishContact(contact.id) mutation
-  // TODO: check the status of the contact
+
+  const expectedDbMessage = {
+    user_id: testTexterUser.id,
+    contact_number: testContact.cell,
+    text: message.text,
+    assignment_id: assignmentId,
+    campaign_contact_id: testContact.id
+  }
+
+  // wait for fakeservice to mark the message as sent
+  await waitForExpect(async () => {
+    const dbMessage = await r.knex('message')
+    expect(dbMessage.length).toEqual(2)
+    expect(dbMessage[0]).toEqual(expect.objectContaining({
+      send_status: 'SENDING',
+      ...expectedDbMessage
+    }))
+    expect(dbMessage[1]).toEqual(expect.objectContaining({
+      send_status: 'SENT',
+      ...expectedDbMessage
+    }))
+  })
+
+  const dbCampaignContact = await r.knex('campaign_contact').first()
+  expect(dbCampaignContact.message_status).toBe('messaged')
+
+  // Refetch the contacts via gql to check the caching
+  context.loaders.campaignContact.clear('1') // TODO: figure ouy why I need this
+  const ret3 = await graphql(mySchema, getAssignmentContacts, rootValue, context, assignVars)
+  expect(ret3.data.getAssignmentContacts[0].messageStatus).toEqual('messaged')
 })
+
+// TODO: Another test where we check do autorespond and check needsReponse
+// TODO: And then we reply to it and make sure that works
