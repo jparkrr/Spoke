@@ -2,9 +2,10 @@
 import { resolvers } from '../src/server/api/schema'
 import { schema } from '../src/api/schema'
 import { graphql } from 'graphql'
-import { User, CampaignContact, r } from '../src/server/models/'
+import { User, CampaignContact, Message, r } from '../src/server/models/'
 import { getContext, setupTest, cleanupTest, getGql } from './test_helpers'
 import { makeExecutableSchema } from 'graphql-tools'
+import waitForExpect from 'wait-for-expect'
 
 const mySchema = makeExecutableSchema({
   typeDefs: schema,
@@ -203,6 +204,8 @@ async function startCampaign() {
 }
 
 beforeEach(async () => {
+  await cleanupTest()
+  r.redis.flushdb()
   await setupTest()
   testAdminUser = await createUser()
 
@@ -223,8 +226,8 @@ beforeEach(async () => {
 }, global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
 
 afterEach(async () => {
-  await cleanupTest()
-  r.redis.flushdb()
+  // await cleanupTest()
+  // r.redis.flushdb()
 }, global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
 
 it('should send an inital message to test contacts', async () => {
