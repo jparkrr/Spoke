@@ -23,37 +23,29 @@ let testOrganization
 let testCampaign
 let testTexterUser
 let testContact
+let assignmentId
 
 beforeEach(async () => {
-  await cleanupTest()
-  r.redis.flushdb()
   await setupTest()
   testAdminUser = await createUser()
-
   testInvite = await createInvite()
-
   testOrganization = await createOrganization(testAdminUser, testInvite)
-
   testCampaign = await createCampaign(testAdminUser, testOrganization)
-
   testContact = await createContact(testCampaign)
-
   testTexterUser = await createTexter(testOrganization)
-
   await assignTexter(testAdminUser, testTexterUser, testCampaign)
+  const dbCampaignContact = await r.knex('campaign_contact').where({ id: testContact.id }).first()
+  assignmentId = dbCampaignContact.assignment_id
   await createScript(testAdminUser, testCampaign)
-  // await createResponse()
   await startCampaign(testAdminUser, testCampaign)
 }, global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
 
 afterEach(async () => {
-  // await cleanupTest()
-  // r.redis.flushdb()
+  await cleanupTest()
+  r.redis.flushdb()
 }, global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
 
 it('should send an inital message to test contacts', async () => {
-  const assignmentId = 1 // TODO: don't hardcode this
-
   const {
     query: [getContacts, getContactsVars],
     mutations
@@ -115,7 +107,7 @@ it('should send an inital message to test contacts', async () => {
     )
   })
 
-  const dbCampaignContact = await r.knex('campaign_contact').first()
+  const dbCampaignContact = await r.knex('campaign_contact').where({ id: testContact.id }).first()
   expect(dbCampaignContact.message_status).toBe('messaged')
 
   // Refetch the contacts via gql to check the caching
@@ -123,5 +115,92 @@ it('should send an inital message to test contacts', async () => {
   expect(ret3.data.getAssignmentContacts[0].messageStatus).toEqual('messaged')
 })
 
-// TODO: Another test where we check do autorespond and check needsReponse
-// TODO: And then we reply to it and make sure that works
+it('should be able to receive a response and reply (using fakeService)', async () => {
+  const {
+    query: [getContacts, getContactsVars],
+    mutations
+  } = getGql('../src/containers/TexterTodo', {
+    messageStatus: 'needsMessage',
+    params: { assignmentId }
+  })
+
+  const contactsResult = await runGql(getContacts, getContactsVars, testTexterUser)
+
+  const [getAssignmentContacts, assignVars] = mutations.getAssignmentContacts(
+    contactsResult.data.assignment.contacts.map(e => e.id),
+    false
+  )
+
+  const ret2 = await runGql(getAssignmentContacts, assignVars, testTexterUser)
+  const contact = ret2.data.getAssignmentContacts[0]
+
+  const message = {
+    contactNumber: contact.cell,
+    userId: testTexterUser.id,
+    text: 'test text autorespond',
+    assignmentId
+  }
+
+  const [messageMutation, messageVars] = mutations.sendMessage(message, contact.id)
+
+  await runGql(messageMutation, messageVars, testTexterUser)
+
+  // wait for fakeservice to autorespond
+  await waitForExpect(async () => {
+    const dbMessage = await r.knex('message')
+    expect(dbMessage.length).toEqual(3)
+    expect(dbMessage[2]).toEqual(
+      expect.objectContaining({
+        send_status: 'DELIVERED',
+        text: `responding to ${message.text}`,
+        user_id: testTexterUser.id,
+        contact_number: testContact.cell,
+        assignment_id: assignmentId,
+        campaign_contact_id: testContact.id
+      })
+    )
+  })
+
+  let dbCampaignContact = await r.knex('campaign_contact').where({ id: testContact.id }).first()
+  expect(dbCampaignContact.message_status).toBe('needsResponse')
+
+  // Refetch the contacts via gql to check the caching
+  const ret3 = await runGql(getAssignmentContacts, assignVars, testTexterUser)
+  expect(ret3.data.getAssignmentContacts[0].messageStatus).toEqual('needsResponse')
+
+  // Then we reply
+  const message2 = {
+    contactNumber: contact.cell,
+    userId: testTexterUser.id,
+    text: 'reply',
+    assignmentId
+  }
+
+  const [replyMutation, replyVars] = mutations.sendMessage(message2, contact.id)
+
+  await runGql(replyMutation, replyVars, testTexterUser)
+
+
+  // wait for fakeservice to mark the message as sent
+  await waitForExpect(async () => {
+    const dbMessage = await r.knex('message')
+    expect(dbMessage.length).toEqual(5)
+    expect(dbMessage[3]).toEqual(
+      expect.objectContaining({
+        send_status: 'SENDING'
+      })
+    )
+    expect(dbMessage[4]).toEqual(
+      expect.objectContaining({
+        send_status: 'SENT'
+      })
+    )
+  })
+
+  dbCampaignContact = await r.knex('campaign_contact').where({ id: testContact.id }).first()
+  expect(dbCampaignContact.message_status).toBe('convo')
+
+  // Refetch the contacts via gql to check the caching
+  const ret4 = await runGql(getAssignmentContacts, assignVars, testTexterUser)
+  expect(ret4.data.getAssignmentContacts[0].messageStatus).toEqual('convo')
+})

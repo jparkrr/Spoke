@@ -20,14 +20,13 @@ export function getContext(context) {
 }
 import loadData from '../src/containers/hoc/load-data'
 jest.mock('../src/containers/hoc/load-data')
-// TODO: fix this a bit
 /* Used to get graphql queries from components.
 *  Because of some limitations with the jest require cache that
 *  I can't find a way of getting around, it should only be called once
 *  per test.
 
-*  The query it returns should be that of the requested component, but
-*  the mutations should be merged from the component and its children.
+*  The query it returns will be that of the requested component, but
+*  the mutations will be merged from the component and its children.
 */
 export function getGql(componentPath, props) {
   require(componentPath) // eslint-disable-line
