@@ -1,4 +1,4 @@
-import { r, loaders } from '../../models'
+import { r } from '../../models'
 import campaignCache from './campaign'
 import { loadAssignmentContacts, getContacts, optOutContact } from './assignment-contacts'
 
@@ -115,7 +115,6 @@ const loadDeep = async (id) => {
     // console.log('cached campaign for assn', campaign)
     await saveCache(assignment, campaign)
   }
-  loaders.assignment.clear(id)
   return { assignment }
 }
 
@@ -134,14 +133,12 @@ const assignmentCache = {
     if (r.redis) {
       await r.redis.delAsync(assignmentHashKey(id))
     }
-    loaders.assignment.clear(id)
   },
   clearAll: async (ids) => {
     if (r.redis && ids && ids.length) {
       const keys = ids.map(id => assignmentHashKey(id))
       await r.redis.delAsync(...keys)
     }
-    loaders.assignment.clearAll()
   },
   reload: loadDeep,
   load: async (id) => {

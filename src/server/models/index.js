@@ -118,14 +118,11 @@ const createLoaders = () => ({
   questionResponse: createLoader(QuestionResponse),
   userCell: createLoader(UserCell),
   userOrganization: createLoader(UserOrganization)
-}
-
-const createLoaders = () => loaders
+})
 
 const r = thinky.r
 
 export {
-  loaders,
   createLoaders,
   r,
   cacheableData,
