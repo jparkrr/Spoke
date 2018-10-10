@@ -1,5 +1,5 @@
 import _ from 'lodash'
-import { createLoaders, createTables, dropTables, User, CampaignContact } from '../src/server/models/'
+import { createLoaders, createTables, dropTables, User, CampaignContact, r } from '../src/server/models/'
 import { graphql } from 'graphql'
 
 export async function setupTest() {
@@ -253,4 +253,11 @@ export async function startCampaign(admin, campaign) {
   const context = getContext({ user: admin })
   const variables = { campaignId: campaign.id }
   return await graphql(mySchema, startCampaignQuery, rootValue, context, variables)
+}
+
+export async function getCampaignContact(id) {
+  return await r
+  .knex('campaign_contact')
+  .where({ id })
+  .first()
 }
