@@ -26,6 +26,7 @@ let testContact
 let assignmentId
 
 beforeEach(async () => {
+  // Set up an entire working campaign
   await setupTest()
   testAdminUser = await createUser()
   testInvite = await createInvite()
@@ -42,7 +43,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await cleanupTest()
-  r.redis.flushdb()
+  if (r.redis) r.redis.flushdb()
 }, global.DATABASE_SETUP_TEARDOWN_TIMEOUT)
 
 it('should send an inital message to test contacts', async () => {
@@ -105,10 +106,9 @@ it('should send an inital message to test contacts', async () => {
         ...expectedDbMessage
       })
     )
+    const dbCampaignContact = await r.knex('campaign_contact').where({ id: testContact.id }).first()
+    expect(dbCampaignContact.message_status).toBe('messaged')
   })
-
-  const dbCampaignContact = await r.knex('campaign_contact').where({ id: testContact.id }).first()
-  expect(dbCampaignContact.message_status).toBe('messaged')
 
   // Refetch the contacts via gql to check the caching
   const ret3 = await runGql(getAssignmentContacts, assignVars, testTexterUser)
@@ -161,8 +161,10 @@ it('should be able to receive a response and reply (using fakeService)', async (
     )
   })
 
-  let dbCampaignContact = await r.knex('campaign_contact').where({ id: testContact.id }).first()
-  expect(dbCampaignContact.message_status).toBe('needsResponse')
+  await waitForExpect(async() => {
+    const dbCampaignContact = await r.knex('campaign_contact').where({ id: testContact.id }).first()
+    expect(dbCampaignContact.message_status).toBe('needsResponse')
+  })
 
   // Refetch the contacts via gql to check the caching
   const ret3 = await runGql(getAssignmentContacts, assignVars, testTexterUser)
@@ -195,10 +197,10 @@ it('should be able to receive a response and reply (using fakeService)', async (
         send_status: 'SENT'
       })
     )
+    const dbCampaignContact = await r.knex('campaign_contact').where({ id: testContact.id }).first()
+    expect(dbCampaignContact.message_status).toBe('convo')
   })
 
-  dbCampaignContact = await r.knex('campaign_contact').where({ id: testContact.id }).first()
-  expect(dbCampaignContact.message_status).toBe('convo')
 
   // Refetch the contacts via gql to check the caching
   const ret4 = await runGql(getAssignmentContacts, assignVars, testTexterUser)
