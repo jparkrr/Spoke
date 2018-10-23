@@ -1,12 +1,14 @@
 import PropTypes from 'prop-types'
 import React from 'react'
-import { withRouter } from 'react-router'
+import { Link, withRouter } from 'react-router'
 import Empty from '../components/Empty'
 import OrganizationJoinLink from '../components/OrganizationJoinLink'
 import UserEdit from './UserEdit'
 import FlatButton from 'material-ui/FlatButton'
+import RaisedButton from 'material-ui/RaisedButton'
 import FloatingActionButton from 'material-ui/FloatingActionButton'
 import DropDownMenu from 'material-ui/DropDownMenu'
+import TextField from 'material-ui/TextField'
 import MenuItem from 'material-ui/MenuItem'
 import ContentAdd from 'material-ui/svg-icons/content/add'
 import { Table, TableBody, TableRow, TableRowColumn } from 'material-ui/Table'
@@ -18,9 +20,24 @@ import loadData from './hoc/load-data'
 import gql from 'graphql-tag'
 import { dataTest } from '../lib/attributes'
 import LoadingIndicator from '../components/LoadingIndicator'
+import { StyleSheet, css } from 'aphrodite'
+import { Toolbar, ToolbarGroup } from 'material-ui'
+
+const styles = StyleSheet.create({
+  toolbar: {
+    background: '#fff'
+  },
+  goButton: {
+    marginLeft: 15,
+    marginRight: 5
+  },
+  clearButton: {
+    marginLeft: 5,
+    marginRight: 5
+  }
+})
 
 class AdminPersonList extends React.Component {
-
   constructor(props) {
     super(props)
     this.handleOpen = this.handleOpen.bind(this)
@@ -31,7 +48,9 @@ class AdminPersonList extends React.Component {
 
   state = {
     open: false,
-    userEdit: false
+    userEdit: false,
+    searchInput: '',
+    activeSearch: null
   }
 
   handleFilterChange = (campaignId, offset) => {
@@ -100,31 +119,79 @@ class AdminPersonList extends React.Component {
     return null
   }
 
-  renderCampaignList() {
+  renderCampaignDropdown = () => {
     const { organizationData: { organization } } = this.props
     const campaigns = organization ? organization.campaigns : []
     return (
-      <DropDownMenu
-        value={this.props.location.query.campaignId}
-        onChange={this.handleCampaignChange}
-      >
-        <MenuItem primaryText='All Campaigns' />
-        {campaigns.map(campaign => (
-          <MenuItem
-            value={campaign.id}
-            primaryText={campaign.title}
-            key={campaign.id}
-          />
-        ))}
-      </DropDownMenu>
+      <ToolbarGroup firstChild>
+        <DropDownMenu
+          value={this.props.location.query.campaignId}
+          onChange={this.handleFilterChange}
+        >
+          <MenuItem primaryText='All Campaigns' />
+          {campaigns.map(campaign => (
+            <MenuItem
+              value={campaign.id}
+              primaryText={campaign.title}
+              key={campaign.id}
+            />
+          ))}
+        </DropDownMenu>
+      </ToolbarGroup>
     )
   }
+
+  renderCampaignsForPerson = person => (
+    Boolean(person.todos.length) && (
+      <ul>
+        <li>
+          {person.todos.map(t => (
+            <Link key={t.id} to={`/admin/${this.props.params.organizationId}/campaigns/${t.campaign.id}`}>
+              {t.campaign.title}
+            </Link>
+          ))}
+        </li>
+      </ul>
+    )
+  )
+
+  renderSearch = () => (
+    <ToolbarGroup lastChild>
+      <TextField
+        name='search'
+        placeholder='Search'
+        value={this.state.searchInput}
+        onChange={e => this.setState({ searchInput: e.target.value })}
+      />
+      <RaisedButton
+        label='Go'
+        primary
+        className={css(styles.goButton)}
+        onTouchTap={() => this.setState({ activeSearch: this.state.searchInput })}
+      />
+      <FlatButton
+        label='Clear'
+        className={css(styles.clearButton)}
+        onTouchTap={() => this.setState({ searchInput: '', activeSearch: null })}
+      />
+    </ToolbarGroup>
+  )
 
   renderTexters() {
     const { personData, userData: { currentUser } } = this.props
     if (!currentUser) return <LoadingIndicator />
 
-    const people = personData.organization && personData.organization.people || []
+    let people = personData.organization && personData.organization.people || []
+
+    // Filter people by the search query
+    if (this.state.activeSearch) {
+      people = people.filter(
+        person =>
+          person.displayName.indexOf(this.state.activeSearch) !== -1 ||
+          person.email.indexOf(this.state.activeSearch) !== -1
+      )
+    }
+
     if (people.length === 0) {
       return (
         <Empty
@@ -144,7 +211,10 @@ class AdminPersonList extends React.Component {
             <TableRow
               key={person.id}
             >
-              <TableRowColumn>{person.displayName}</TableRowColumn>
+              <TableRowColumn>
+                {person.displayName}<br />
+                {this.renderCampaignsForPerson(person)}
+              </TableRowColumn>
               <TableRowColumn>{person.email}</TableRowColumn>
               <TableRowColumn>
                 <DropDownMenu
@@ -179,8 +249,11 @@ class AdminPersonList extends React.Component {
 
     return (
       <div>
-        {this.renderCampaignList()}
-        {this.renderOffsetList()}
+        <Toolbar className={css(styles.toolbar)}>
+          {this.renderCampaignDropdown()}
+          {this.renderSearch()}
+          {this.renderOffsetList()}
+        </Toolbar>
         {this.renderTexters()}
         <FloatingActionButton
           {...dataTest('addPerson')}
@@ -247,6 +320,12 @@ const organizationFragment = `
     displayName
     email
     roles(organizationId: $organizationId)
+    todos(organizationId: $organizationId) {
+      campaign {
+        id
+        title
+      }
+    }
   }
 `
 const mapMutationsToProps = ({ ownProps }) => ({
