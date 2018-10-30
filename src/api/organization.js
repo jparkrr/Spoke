@@ -8,7 +8,7 @@ export const schema = `
     uuid: String
     name: String
     campaigns(campaignsFilter: CampaignsFilter): [Campaign]
-    people(role: String, campaignId: String, offset: Int): [User]
+    people(role: String, campaignId: String, offset: Int, searchTerm: String): [User]
     peopleCount: Int
     optOuts: [OptOut]
     threeClickEnabled: Boolean

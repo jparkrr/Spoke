@@ -32,10 +32,10 @@ export const resolvers = {
       return r.table('opt_out')
         .getAll(organization.id, { index: 'organization_id' })
     },
-    people: async (organization, { role, campaignId, offset }, { user }) => {
+    people: async (organization, { role, campaignId, offset, searchTerm }, { user }) => {
       await accessRequired(user, organization.id, 'SUPERVOLUNTEER')
       const query = buildUserOrganizationQuery(
-        r.knex.select('user.*'), organization.id, role, campaignId, offset)
+        r.knex.select('user.*'), organization.id, role, campaignId, offset, searchTerm)
         .orderBy('created_at', 'desc')
       if (typeof offset === 'number') {
         return query.limit(200)

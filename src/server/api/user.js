@@ -1,7 +1,7 @@
 import { mapFieldsToModel } from './lib/utils'
 import { r, User } from '../models'
 
-export function buildUserOrganizationQuery(queryParam, organizationId, role, campaignId, offset) {
+export function buildUserOrganizationQuery(queryParam, organizationId, role, campaignId, offset, searchTerm) {
   const roleFilter = role ? { role } : {}
 
   queryParam
@@ -9,9 +9,6 @@ export function buildUserOrganizationQuery(queryParam, organizationId, role, cam
     .innerJoin('user', 'user_organization.user_id', 'user.id')
     .where(roleFilter)
     .where({ 'user_organization.organization_id': organizationId })
-    .where(b => {
-      b.whereRaw("LOWER(first_name) like '%text%' or LOWER(last_name) like '%text%'")
-    })
     .distinct()
 
   if (campaignId) {
@@ -20,6 +17,12 @@ export function buildUserOrganizationQuery(queryParam, organizationId, role, cam
   }
   if (typeof offset === 'number') {
     queryParam.offset(offset)
+  }
+  if (searchTerm) {
+    // Need to use a raw query for case insensitive search
+    queryParam.where(q => {
+      .whereRaw("LOWER(first_name) like '%?%'", searchTerm.toLowerCase())
+      .orWhereRaw("LOWER(last_name) like '%?%'", searchTerm.toLowerCase())
   }
   return queryParam
 }
