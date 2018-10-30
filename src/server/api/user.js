@@ -9,13 +9,16 @@ export function buildUserOrganizationQuery(queryParam, organizationId, role, cam
     .innerJoin('user', 'user_organization.user_id', 'user.id')
     .where(roleFilter)
     .where({ 'user_organization.organization_id': organizationId })
+    .where(b => {
+      b.whereRaw("LOWER(first_name) like '%text%' or LOWER(last_name) like '%text%'")
+    })
     .distinct()
 
   if (campaignId) {
     queryParam.innerJoin('assignment', 'assignment.user_id', 'user.id')
     .where({ 'assignment.campaign_id': campaignId })
   }
-  if (typeof offset == 'number') {
+  if (typeof offset === 'number') {
     queryParam.offset(offset)
   }
   return queryParam

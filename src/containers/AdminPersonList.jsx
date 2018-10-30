@@ -96,7 +96,7 @@ class AdminPersonList extends React.Component {
 
   renderOffsetList() {
     const LIMIT = 200
-    const { personData: { organization} } = this.props
+    const { personData: { organization } } = this.props
     if (organization.peopleCount > LIMIT) {
       const offsetList = Array.apply(null, { length: Math.ceil(organization.peopleCount / LIMIT) })
       return (
