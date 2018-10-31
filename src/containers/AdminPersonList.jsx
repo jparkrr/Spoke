@@ -50,12 +50,12 @@ class AdminPersonList extends React.Component {
     open: false,
     userEdit: false,
     searchInput: '',
-    activeSearch: null
   }
 
-  handleFilterChange = (campaignId, offset) => {
+  handleFilterChange = (campaignId, offset, searchTerm) => {
     let query = '?' + (campaignId ? `campaignId=${campaignId}` : '')
     query += (offset ? `&offset=${offset}` : '')
+    query += (search ? `&search=${search}` : '')
     this.props.router.push(
       `/admin/${this.props.params.organizationId}/people${query}`
     )
@@ -69,6 +69,11 @@ class AdminPersonList extends React.Component {
   handleOffsetChange = (event, index, value) => {
     this.handleFilterChange(this.props.location.query.campaignId, value)
   }
+  
+  handleSearchSubmit = () => {
+    debugger
+    // this.handleFilterChange()
+  }
 
   handleOpen() {
     this.setState({ open: true })
@@ -79,6 +84,8 @@ class AdminPersonList extends React.Component {
   }
 
   handleChange = async (userId, value) => {
+    // todo: search term?
+    debugger;
     await this
       .props
       .mutations
@@ -95,25 +102,27 @@ class AdminPersonList extends React.Component {
   }
 
   renderOffsetList() {
-    const LIMIT = 200
+    const LIMIT = 1
     const { personData: { organization } } = this.props
     if (organization.peopleCount > LIMIT) {
       const offsetList = Array.apply(null, { length: Math.ceil(organization.peopleCount / LIMIT) })
       return (
-        <DropDownMenu
-          value={Number(this.props.location.query.offset || 0)}
-          onChange={this.handleOffsetChange}
-        >
-          {offsetList.map(
-            (x,i) => (
-              <MenuItem
-                value={i}
-                primaryText={`Page ${i+1}`}
-                key={i+1}
-              />
-            )
-          )}
-        </DropDownMenu>
+        <ToolbarGroup>
+          <DropDownMenu
+            value={Number(this.props.location.query.offset || 0)}
+            onChange={this.handleOffsetChange}
+          >
+            {offsetList.map(
+              (x,i) => (
+                <MenuItem
+                  value={i}
+                  primaryText={`Page ${i+1}`}
+                  key={i+1}
+                />
+              )
+            )}
+          </DropDownMenu>
+        </ToolbarGroup>
       )
     }
     return null
@@ -161,7 +170,7 @@ class AdminPersonList extends React.Component {
         name='search'
         placeholder='Search'
         value={this.state.searchInput}
-        onChange={e => this.setState({ searchInput: e.target.value })}
+        onChange={this.handleSearchSubmit}
       />
       <RaisedButton
         label='Go'
@@ -182,15 +191,6 @@ class AdminPersonList extends React.Component {
     if (!currentUser) return <LoadingIndicator />
 
     let people = personData.organization && personData.organization.people || []
-
-    // Filter people by the search query
-    if (this.state.activeSearch) {
-      people = people.filter(
-        person =>
-          person.displayName.indexOf(this.state.activeSearch) !== -1 ||
-          person.email.indexOf(this.state.activeSearch) !== -1
-      )
-    }
 
     if (people.length === 0) {
       return (
@@ -315,7 +315,7 @@ AdminPersonList.propTypes = {
 const organizationFragment = `
   id
   peopleCount
-  people(campaignId: $campaignId, offset: $offset) {
+  people(campaignId: $campaignId, offset: $offset, searchTerm: $search) {
     id
     displayName
     email
@@ -331,7 +331,7 @@ const organizationFragment = `
 const mapMutationsToProps = ({ ownProps }) => ({
   editOrganizationRoles: (organizationId, userId, roles) => ({
     mutation: gql`
-      mutation editOrganizationRoles($organizationId: String!, $userId: String!, $roles: [String], $campaignId: String, $offset: Int) {
+      mutation editOrganizationRoles($organizationId: String!, $userId: String!, $roles: [String], $campaignId: String, $offset: Int, $searchTerm: String) {
         editOrganizationRoles(organizationId: $organizationId, userId: $userId, roles: $roles, campaignId: $campaignId) {
           ${organizationFragment}
         }
@@ -342,14 +342,15 @@ const mapMutationsToProps = ({ ownProps }) => ({
       userId,
       roles,
       campaignId: ownProps.location.query.campaignId,
-      offset: ownProps.location.query.offset || 0
+      offset: ownProps.location.query.offset || 0,
+      searchTerm: ownProps.location.query.search,
     }
   })
 })
 
 const mapQueriesToProps = ({ ownProps }) => ({
   personData: {
-    query: gql`query getPeople($organizationId: String!, $campaignId: String, $offset: Int) {
+    query: gql`query getPeople($organizationId: String!, $campaignId: String, $offset: Int, $searchTerm: String) {
       organization(id: $organizationId) {
         ${organizationFragment}
       }
@@ -357,7 +358,8 @@ const mapQueriesToProps = ({ ownProps }) => ({
     variables: {
       organizationId: ownProps.params.organizationId,
       campaignId: ownProps.location.query.campaignId,
-      offset: ownProps.location.query.offset || 0
+      offset: ownProps.location.query.offset || 0,
+      searchTerm: ownProps.location.query.search,
     },
     forceFetch: true
   },
